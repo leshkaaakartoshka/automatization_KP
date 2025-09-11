@@ -67,9 +67,14 @@ class TelegramService:
                 
                 if response.status_code == 200:
                     result = response.json()
-                    return result.get('ok', False)
+                    if result.get('ok', False):
+                        print(f"✅ PDF successfully sent to Telegram for lead {lead_id}")
+                        return True
+                    else:
+                        print(f"❌ Telegram API returned error for lead {lead_id}: {result}")
+                        return False
                 else:
-                    print(f"Telegram API error for lead {lead_id}: {response.status_code} - {response.text}")
+                    print(f"❌ Telegram API HTTP error for lead {lead_id}: {response.status_code} - {response.text}")
                     return False
                     
         except Exception as e:

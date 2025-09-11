@@ -12,7 +12,8 @@ from app.models.schemas import QuoteForm, QuoteResponse
 from app.providers.lookup.base import LookupProvider
 from app.providers.lookup.sheets import SheetsLookupProvider
 from app.providers.lookup.postgres import PostgresLookupProvider
-from app.services.llm import LLMService
+from app.providers.lookup.mock import MockLookupProvider
+from app.services.quote_generator import QuoteGenerator
 from app.services.pdf import PDFService
 from app.services.telegram import TelegramService
 from app.middleware.errors import QuoteGenerationError
@@ -26,6 +27,8 @@ def get_lookup_provider(settings: Settings) -> LookupProvider:
         return SheetsLookupProvider(settings)
     elif settings.lookup_source == LookupSource.POSTGRES:
         return PostgresLookupProvider(settings)
+    elif settings.lookup_source == LookupSource.MOCK:
+        return MockLookupProvider(settings)
     else:
         raise ValueError(f"Unsupported lookup source: {settings.lookup_source}")
 
@@ -52,7 +55,7 @@ async def generate_quote(
     try:
         # Initialize services
         lookup_provider = get_lookup_provider(settings)
-        llm_service = LLMService(settings)
+        quote_generator = QuoteGenerator()
         pdf_service = PDFService(settings)
         telegram_service = TelegramService(settings)
         
@@ -63,7 +66,7 @@ async def generate_quote(
             x_mm=quote_form.x_mm,
             y_mm=quote_form.y_mm,
             z_mm=quote_form.z_mm,
-            material=quote_form.material,
+            material=quote_form.cardboard_type,
             print=quote_form.print,
             sla_type=quote_form.sla_type,
             qty=quote_form.qty
@@ -76,17 +79,17 @@ async def generate_quote(
                 detail="Price pack not found"
             )
         
-        # Step 2: Generate LLM response
-        llm_start = time.time()
-        llm_response = await llm_service.generate_quote(quote_form, lookup_result)
-        llm_ms = int((time.time() - llm_start) * 1000)
-        lead_id = llm_response.lead_id
+        # Step 2: Generate quote data
+        quote_start = time.time()
+        quote_data = quote_generator.generate_quote_data(quote_form, lookup_result)
+        quote_ms = int((time.time() - quote_start) * 1000)
+        lead_id = quote_data["lead_id"]
         
         # Step 3: Generate PDF
         pdf_start = time.time()
         pdf_path = pdf_service.get_pdf_path(lead_id)
         await pdf_service.html_to_pdf(
-            html_content=llm_response.html_block,
+            html_content=quote_data["html_block"],
             output_path=pdf_path,
             lead_id=lead_id
         )
@@ -117,7 +120,7 @@ async def generate_quote(
         
         # Log performance metrics
         print(f"Quote generation completed for {lead_id}: "
-              f"lookup={lookup_ms}ms, llm={llm_ms}ms, pdf={pdf_ms}ms, "
+              f"lookup={lookup_ms}ms, quote={quote_ms}ms, pdf={pdf_ms}ms, "
               f"telegram={tg_ms}ms, total={total_ms}ms")
         
         return QuoteResponse(

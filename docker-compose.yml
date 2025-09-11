@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: cpq-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TG_BOT_TOKEN=${TG_BOT_TOKEN}
+      - TG_MANAGER_CHAT_ID=${TG_MANAGER_CHAT_ID}
+      - LOOKUP_SOURCE=${LOOKUP_SOURCE:-mock}
+      - LOOKUP_POLICY=${LOOKUP_POLICY:-strict}
+      - SHEETS_ID=${SHEETS_ID}
+      - SHEETS_TAB=${SHEETS_TAB:-QuoteCatalog}
+      - DB_DSN=${DB_DSN}
+      - PDF_STORAGE=${PDF_STORAGE:-local}
+      - PDF_DIR=${PDF_DIR:-pdf}
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_KEY=${S3_KEY}
+      - S3_SECRET=${S3_SECRET}
+      - BASE_URL=${BASE_URL:-http://localhost:8000}
+      - HASH_SALT=${HASH_SALT}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./backend/pdf:/app/pdf
+      - ./backend/credentials.json:/app/credentials.json:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: cpq-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Optional: PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: cpq-postgres
+    environment:
+      - POSTGRES_DB=cpq_db
+      - POSTGRES_USER=cpq_user
+      - POSTGRES_PASSWORD=cpq_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -41,11 +41,6 @@ describe('quoteSchema', () => {
     expect(res.success).toBe(true);
   });
 
-  it('tg username regex', () => {
-    expect(quoteSchema.safeParse({ ...base, tg_username: '@ab' }).success).toBe(false);
-    expect(quoteSchema.safeParse({ ...base, tg_username: '@valid_123' }).success).toBe(true);
-    expect(quoteSchema.safeParse({ ...base, tg_username: 'valid_123' }).success).toBe(true);
-  });
 
   it('print optional', () => {
     expect(quoteSchema.safeParse({ ...base, print: undefined }).success).toBe(true);

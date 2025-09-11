@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { IMaskInput } from 'react-imask';
 import { FormField, FormRow, ResultCard, StatusBar } from './components/FormPrimitives';
-import { fefcoOptions, materialOptions, printOptions, slaOptions, quoteSchema, type QuoteFormData } from './validation';
+import { fefcoFoldingOptions, fefcoWrappingOptions, fefcoAuxiliaryOptions, cardboardTypeOptions, cardboardGradeOptions, printOptions, slaOptions, type QuoteFormData } from './validation';
 import { postQuote, type ApiResponse } from './api';
+import { calculateTariffs, getAllTariffInfos, formatPrice, type TariffType } from './calculations/tariff-calculator';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
 
@@ -24,26 +24,31 @@ function App() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
     setValue,
     trigger,
-    control,
+    watch,
   } = useForm<QuoteFormData>({
     mode: 'all',
-    resolver: zodResolver(quoteSchema),
     defaultValues: {
       print: undefined,
     },
   });
 
-  // Keep isValid in sync in tests and runtime
-  const watched = (control as any)?._proxy ? undefined : undefined; // placeholder to avoid unused var warnings
+  // Keep form validation in sync - только при изменении полей формы
   useEffect(() => {
-    void trigger();
-  });
+    const subscription = watch((_value, { name, type }) => {
+      // Триггерим валидацию только при изменении полей
+      if (type === 'change' && name) {
+        void trigger(name);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, trigger]);
 
   const [status, setStatus] = useState<Status>('idle');
   const [result, setResult] = useState<ApiResponse | null>(null);
+  const [selectedTariff, setSelectedTariff] = useState<TariffType>('standard');
   const abortRef = useRef<AbortController | null>(null);
 
   const onSubmit = handleSubmit(async (values) => {
@@ -54,7 +59,25 @@ function App() {
     setResult(null);
     abortRef.current?.abort();
     abortRef.current = new AbortController();
-    const res = await postQuote(values, abortRef.current.signal).catch((err) => ({ ok: false as const, error: String(err) }));
+    
+    // Добавляем информацию о тарифе к данным формы
+    const payload = {
+      ...values,
+      selected_tariff: selectedTariff,
+      final_price: tariffs[selectedTariff],
+      consent_given: true, // Добавляем согласие на обработку данных
+      // Убираем пустые строки для необязательных полей
+      cardboard_grade: values.cardboard_grade || undefined,
+      print: values.print || undefined,
+      company: values.company || undefined,
+      contact_name: values.contact_name || undefined,
+      city: values.city || undefined,
+      phone: values.phone || undefined,
+      email: values.email || undefined,
+      tg_username: values.tg_username || undefined,
+    };
+    
+    const res = await postQuote(payload as any, abortRef.current.signal).catch((err) => ({ ok: false as const, error: String(err) }));
     if (res.ok) {
       pushEvent({ event: 'cpq_api_ok', lead_id: res.lead_id });
       setResult(res);
@@ -66,10 +89,20 @@ function App() {
     }
   });
 
-  const fefcoItems = useMemo(() => fefcoOptions, []);
-  const materialItems = useMemo(() => materialOptions, []);
+  const cardboardTypeItems = useMemo(() => cardboardTypeOptions, []);
+  const cardboardGradeItems = useMemo(() => cardboardGradeOptions, []);
   const printItems = useMemo(() => printOptions, []);
   const slaItems = useMemo(() => slaOptions, []);
+
+  // Получаем выбранный тип картона для условного отображения марки
+  const watchedCardboardType = watch('cardboard_type');
+  
+  // Получаем базовую стоимость для расчета тарифов
+  const watchedBatchCost = watch('batch_cost') || 0;
+  
+  // Рассчитываем все варианты тарифов с мемоизацией
+  const tariffs = useMemo(() => calculateTariffs(watchedBatchCost), [watchedBatchCost]);
+  const tariffInfos = useMemo(() => getAllTariffInfos(watchedBatchCost), [watchedBatchCost]);
 
   return (
     <main className="mx-auto max-w-3xl p-4">
@@ -79,21 +112,37 @@ function App() {
         <fieldset className="rounded-md border p-4">
           <legend className="px-1 text-base font-medium">Параметры коробки</legend>
           <FormRow>
-            <FormField id="fefco" label="FEFCO" required error={errors.fefco?.message}>
+            <FormField id="fefco" label="Код по FEFCO" required error={errors.fefco?.message}>
               <select className="w-full rounded-md border px-3 py-2" {...register('fefco')}> 
                 <option value="">— выберите —</option>
-                {fefcoItems.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
+                <optgroup label="Складные гофрокороба">
+                  {fefcoFoldingOptions.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Обёрточные гофрокороба">
+                  {fefcoWrappingOptions.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Вспомогательные элементы">
+                  {fefcoAuxiliaryOptions.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </FormField>
 
-            <FormField id="material" label="Материал" required error={errors.material?.message}>
-              <select className="w-full rounded-md border px-3 py-2" {...register('material')}>
+            <FormField id="cardboard_type" label="Тип картона" required error={errors.cardboard_type?.message}>
+              <select className="w-full rounded-md border px-3 py-2" {...register('cardboard_type')}>
                 <option value="">— выберите —</option>
-                {materialItems.map((v) => (
+                {cardboardTypeItems.map((v) => (
                   <option key={v} value={v}>
                     {v}
                   </option>
@@ -101,6 +150,21 @@ function App() {
               </select>
             </FormField>
           </FormRow>
+
+          {watchedCardboardType === "3-х слойный гофрокартон" && (
+            <FormRow>
+              <FormField id="cardboard_grade" label="Марка картона" required error={errors.cardboard_grade?.message}>
+                <select className="w-full rounded-md border px-3 py-2" {...register('cardboard_grade')}>
+                  <option value="">— выберите —</option>
+                  {cardboardGradeItems.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </FormRow>
+          )}
 
           <FormRow columns={3}>
             {(['x_mm', 'y_mm', 'z_mm'] as const).map((dim) => (
@@ -121,14 +185,12 @@ function App() {
           <FormRow>
             <FormField id="print" label="Печать" error={errors.print?.message}>
               <select className="w-full rounded-md border px-3 py-2" {...register('print')}>
-                <option value="">без печати</option>
-                {printItems
-                  .filter((p) => p !== 'без печати')
-                  .map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
+                <option value="">— выберите —</option>
+                {printItems.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
               </select>
             </FormField>
 
@@ -156,7 +218,60 @@ function App() {
                 ))}
               </select>
             </FormField>
+
+            <FormField id="batch_cost" label="Стоимость партии" error={errors.batch_cost?.message}>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={10000000}
+                step={1}
+                placeholder="0"
+                className="w-full rounded-md border px-3 py-2"
+                {...register('batch_cost', { valueAsNumber: true })}
+              />
+            </FormField>
           </FormRow>
+
+          {/* Переключатель тарифов */}
+          {watchedBatchCost > 0 && (
+            <FormRow>
+              <FormField id="tariff_selection" label="Выберите тариф">
+                <div className="space-y-3">
+                  {tariffInfos.map((tariff) => (
+                    <label
+                      key={tariff.type}
+                      className={`flex items-center p-3 rounded-md border cursor-pointer transition-colors ${
+                        selectedTariff === tariff.type
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="tariff"
+                        value={tariff.type}
+                        checked={selectedTariff === tariff.type}
+                        onChange={(e) => setSelectedTariff(e.target.value as TariffType)}
+                        className="mr-3"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-900">
+                          {tariff.name}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {tariff.description}
+                        </div>
+                      </div>
+                      <div className="text-lg font-bold text-gray-900">
+                        {formatPrice(tariff.price)} руб
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </FormField>
+            </FormRow>
+          )}
         </fieldset>
 
         <fieldset className="mt-6 rounded-md border p-4">
@@ -185,9 +300,6 @@ function App() {
           <FormRow>
             <FormField id="email" label="Email" error={errors.email?.message}>
               <input type="email" className="w-full rounded-md border px-3 py-2" {...register('email')} />
-            </FormField>
-            <FormField id="tg_username" label="Telegram" hint="@username" error={errors.tg_username?.message}>
-              <input className="w-full rounded-md border px-3 py-2" {...register('tg_username')} />
             </FormField>
           </FormRow>
         </fieldset>

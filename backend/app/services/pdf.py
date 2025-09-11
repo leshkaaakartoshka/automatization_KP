@@ -178,6 +178,50 @@ class PDFService:
             color: #dc3545;
             font-weight: bold;
         }
+        
+        /* QR codes section */
+        .qr-section {
+            margin-top: 1cm;
+            padding: 0.5cm;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        
+        .qr-section h3 {
+            font-size: 14pt;
+            color: #333;
+            margin: 0 0 0.5cm 0;
+            text-align: center;
+        }
+        
+        .qr-codes {
+            display: flex;
+            justify-content: center;
+            gap: 1cm;
+            align-items: center;
+        }
+        
+        .qr-item {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .qr-code {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 0.2cm;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .qr-label {
+            font-size: 9pt;
+            color: #666;
+            font-weight: bold;
+        }
         """
     
     async def html_to_pdf(

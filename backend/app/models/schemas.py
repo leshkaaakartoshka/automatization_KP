@@ -4,12 +4,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # Enums for validation
 class FEFCOType(str, Enum):
     """Valid FEFCO codes."""
+    FEFCO_0200 = "0200"
     FEFCO_0201 = "0201"
     FEFCO_0202 = "0202"
     FEFCO_0203 = "0203"
@@ -20,32 +21,30 @@ class FEFCOType(str, Enum):
     FEFCO_0208 = "0208"
     FEFCO_0209 = "0209"
     FEFCO_0210 = "0210"
+    FEFCO_0211 = "0211"
+    FEFCO_0215 = "0215"
+    FEFCO_0426 = "0426"
+    FEFCO_0427 = "0427"
+    FEFCO_501 = "501"
 
 
 class MaterialType(str, Enum):
     """Valid material types."""
-    MICRO_CRAFT = "Микрогофрокартон Крафт"
-    MICRO_WHITE = "Микрогофрокартон Белый"
-    SINGLE_WALL = "Одностенный гофрокартон"
-    DOUBLE_WALL = "Двухстенный гофрокартон"
-    TRIPLE_WALL = "Трехстенный гофрокартон"
+    THREE_LAYER = "3-х слойный гофрокартон"
+    THREE_LAYER_MICRO = "3-х слойный микрогофрокартон"
 
 
 class PrintType(str, Enum):
     """Valid print types."""
-    PRINT_1_0 = "1+0"
-    PRINT_1_1 = "1+1"
-    PRINT_2_0 = "2+0"
-    PRINT_2_1 = "2+1"
-    PRINT_4_0 = "4+0"
-    PRINT_4_1 = "4+1"
+    YES = "Да"
+    NO = "Нет"
 
 
 class SLAType(str, Enum):
     """Valid SLA types."""
     STANDARD = "стандарт"
     RUSH = "срочно"
-    STRATEGIC = "стратегический"
+    ECONOMY = "эконом"
 
 
 class OptionType(str, Enum):
@@ -61,28 +60,59 @@ class QuoteForm(BaseModel):
     
     # Box specifications
     fefco: FEFCOType
-    x_mm: int = Field(..., ge=20, le=1200, description="Width in mm")
-    y_mm: int = Field(..., ge=20, le=1200, description="Length in mm")
-    z_mm: int = Field(..., ge=20, le=1200, description="Height in mm")
+    cardboard_type: MaterialType
+    cardboard_grade: Optional[str] = Field(None, max_length=50)
+    x_mm: int = Field(..., ge=20, le=3000, description="Width in mm")
+    y_mm: int = Field(..., ge=20, le=3000, description="Length in mm")
+    z_mm: int = Field(..., ge=20, le=3000, description="Height in mm")
     
     # Material and print
-    material: MaterialType
-    print: PrintType
+    print: Optional[PrintType] = None
     
     # Quantity
     qty: int = Field(..., ge=1, le=100000, description="Quantity")
     sla_type: SLAType
+    batch_cost: Optional[int] = Field(None, ge=0, le=10000000)
+    
+    # Additional fields from frontend
+    selected_tariff: Optional[str] = Field(None, max_length=50)
+    final_price: Optional[float] = Field(None, ge=0)
     
     # Company information
-    company: str = Field(..., min_length=1, max_length=200)
-    contact_name: str = Field(..., min_length=1, max_length=100)
-    city: str = Field(..., min_length=1, max_length=100)
-    phone: str = Field(..., min_length=1, max_length=20)
-    email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
+    company: Optional[str] = Field(None, max_length=200)
+    contact_name: Optional[str] = Field(None, max_length=100)
+    city: Optional[str] = Field(None, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    email: Optional[str] = Field(None, pattern=r'^[^@]+@[^@]+\.[^@]+$')
     tg_username: Optional[str] = Field(None, max_length=50)
     
     # Optional consent flag for GDPR/152-FZ
     consent_given: Optional[bool] = Field(False)
+    
+    @field_validator('print', 'tg_username', mode='before')
+    @classmethod
+    def convert_undefined_to_none(cls, v):
+        """Convert undefined values to None."""
+        if v is None or v == 'undefined' or v == '':
+            return None
+        return v
+    
+    @field_validator('cardboard_grade')
+    @classmethod
+    def validate_cardboard_grade(cls, v, info):
+        """Validate cardboard_grade is required for 3-х слойный гофрокартон."""
+        cardboard_type = info.data.get('cardboard_type')
+        if cardboard_type == MaterialType.THREE_LAYER and (not v or v.strip() == ''):
+            raise ValueError('Марка картона обязательна для 3-х слойного гофрокартона')
+        return v
+    
+    @model_validator(mode='after')
+    def validate_cardboard_grade_required(self):
+        """Validate cardboard_grade is required for 3-х слойный гофрокартон."""
+        if (self.cardboard_type == MaterialType.THREE_LAYER and 
+            (not self.cardboard_grade or self.cardboard_grade.strip() == '')):
+            raise ValueError('Марка картона обязательна для 3-х слойного гофрокартона')
+        return self
 
 
 class QuoteResponse(BaseModel):
@@ -134,111 +164,17 @@ class LookupResult(BaseModel):
     terms: List[str]
 
 
-# LLM Models
-class Dimensions(BaseModel):
-    """Box dimensions."""
-    x: int
-    y: int
-    z: int
-
-
-class Summary(BaseModel):
-    """Quote summary."""
-    fefco: str
-    dimensions_mm: Dimensions
-    material: str
-    print: str
-    qty: int
-    sku: str
-
-
-class Option(BaseModel):
-    """Quote option."""
-    name: OptionType
-    price_per_unit_rub: float
-    lead_time: str
-    margin_pct: float
-    notes: Optional[List[str]] = None
-
-
-class CTA(BaseModel):
-    """Call to action."""
-    confirm_variants: List[str]
-    followups: Optional[List[str]] = None
-
-
-class LLMResponse(BaseModel):
-    """Response from OpenAI with structured output."""
+# Quote Generator Models (simplified without AI)
+class QuoteData(BaseModel):
+    """Generated quote data."""
     lead_id: str
     echo_price_hash: str
-    summary: Summary
-    options: List[Option] = Field(..., min_items=3, max_items=3)
+    summary: Dict[str, Any]
+    options: List[Dict[str, Any]]
     what_included: List[str]
     important: List[str]
-    cta: CTA
+    cta: Dict[str, Any]
     html_block: str
-    
-    @field_validator('options')
-    @classmethod
-    def validate_options_count(cls, v):
-        if len(v) != 3:
-            raise ValueError('Must have exactly 3 options')
-        return v
-
-
-class Buyer(BaseModel):
-    """Buyer information."""
-    company: str
-    contact_name: str
-    city: str
-    phone: str
-    email: str
-    tg_username: Optional[str] = None
-
-
-class Inputs(BaseModel):
-    """Input specifications."""
-    fefco: str
-    x_mm: int
-    y_mm: int
-    z_mm: int
-    material: str
-    print: str
-    qty: int
-    sla_type: str
-
-
-class LookupData(BaseModel):
-    """Lookup data for LLM."""
-    sku: str
-    qty_band: QtyBand
-    lead_time: LeadTime
-    prices: Prices
-    terms: List[str]
-
-
-class Branding(BaseModel):
-    """Branding information."""
-    company_name: str = "CPQ System"
-    logo_url: Optional[str] = None
-    contact_info: str = "+7 (495) 123-45-67"
-
-
-class Control(BaseModel):
-    """Control information for LLM."""
-    lead_id: str
-    date_today: str
-    valid_until: str
-    price_hash: str
-
-
-class LLMRequest(BaseModel):
-    """Request payload for OpenAI."""
-    control: Control
-    buyer: Buyer
-    inputs: Inputs
-    lookup: LookupData
-    branding: Branding
 
 
 # Error Models

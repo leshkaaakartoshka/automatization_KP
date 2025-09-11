@@ -1,3 +1,5 @@
+@import './design-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,9 +13,16 @@
     scroll-behavior: smooth;
   }
   body {
-    @apply min-h-screen bg-white text-gray-900 antialiased;
+    @apply min-h-screen antialiased;
+    background-color: var(--page-bg);
+    color: var(--text-primary);
+    font-family: var(--font-family);
   }
   a {
-    @apply text-primary-600 hover:text-primary-700 underline-offset-2;
+    color: var(--link-blue);
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
   }
 }
