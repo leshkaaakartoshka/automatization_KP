@@ -60,7 +60,7 @@ export function createPDFContent(data: QuoteData, pricingData: PricingData): str
   const { 
     page_bg, card_bg, accent_yellow, text_primary, text_secondary, 
     border_muted, link_blue, font_family, radius_md, radius_lg, 
-    space_xs, space_sm, space_md, space_lg 
+    space_md, space_lg 
   } = DESIGN_TOKENS;
 
   return `
@@ -302,7 +302,7 @@ export function createPDFContent(data: QuoteData, pricingData: PricingData): str
  * В реальном приложении здесь будет вызов API для генерации PDF
  */
 export async function generatePDF(data: QuoteData, pricingData: PricingData): Promise<string> {
-  const htmlContent = createPDFContent(data, pricingData);
+  createPDFContent(data, pricingData);
   
   // В реальном приложении здесь будет отправка на бэкэнд для генерации PDF
   // const response = await fetch('/api/generate-pdf', {
@@ -375,7 +375,7 @@ function getTariffName(tariffType: string): string {
   return tariffNames[tariffType] || 'Стандартный';
 }
 
-export function validatePDFData(data: QuoteData, pricingData: PricingData): string[] {
+export function validatePDFData(data: QuoteData, _pricingData: PricingData): string[] {
   const errors: string[] = [];
 
   if (!data.fefco) errors.push('Код FEFCO обязателен');

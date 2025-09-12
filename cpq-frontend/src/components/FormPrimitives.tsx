@@ -28,7 +28,6 @@ export function FormField({ id, label, hint, error, children, required }: FormFi
       <div className="mt-1">
         {React.isValidElement(children)
           ? React.cloneElement(children as React.ReactElement, {
-              id,
               'aria-describedby': describedByIds || undefined,
               'aria-invalid': error ? true : undefined,
             })

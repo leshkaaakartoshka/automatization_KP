@@ -1,7 +1,8 @@
 // Демонстрационный файл для показа PDF генерации
-import React, { useState } from 'react';
-import { PDFPreview, createTestData, generatePDF, validatePDFData } from './pdf-generator';
-import { QuoteData, PricingData } from './pdf-generator';
+import { useState } from 'react';
+import { createTestData, generatePDF, validatePDFData } from './pdf-generator';
+import type { QuoteData, PricingData } from './pdf-generator';
+import { PDFPreview } from './components/PDFPreview';
 
 export function PDFDemo() {
   const [data, setData] = useState<QuoteData | null>(null);

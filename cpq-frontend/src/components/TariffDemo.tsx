@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { calculateTariffs, getAllTariffInfos, formatPrice, type TariffType } from '../calculations/tariff-calculator';
 
 export function TariffDemo() {

@@ -1,5 +1,5 @@
-import React from 'react';
-import { QuoteData, PricingData, DESIGN_TOKENS } from '../pdf-generator';
+import type { QuoteData, PricingData } from '../pdf-generator';
+import { DESIGN_TOKENS } from '../pdf-generator';
 
 interface PDFPreviewProps {
   data: QuoteData;
@@ -11,7 +11,7 @@ export function PDFPreview({ data, pricingData, className = '' }: PDFPreviewProp
   const { 
     page_bg, card_bg, accent_yellow, text_primary, text_secondary, 
     border_muted, link_blue, font_family, radius_md, radius_lg, 
-    space_xs, space_sm, space_md, space_lg 
+    space_md, space_lg 
   } = DESIGN_TOKENS;
 
   return (
