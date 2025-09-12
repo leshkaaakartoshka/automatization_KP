@@ -30,12 +30,12 @@ class PDFStorage(str, Enum):
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
-    # OpenAI Configuration
-    openai_api_key: str = Field("", env="OPENAI_API_KEY")
+    # AI Configuration (if needed in future)
+    # openai_api_key: str = Field("", env="OPENAI_API_KEY")
     
     # Telegram Configuration
-    tg_bot_token: str = Field("8002218428:AAHc16QGyirno9v3PhaOwzTkIpMa3glCyxM", env="TG_BOT_TOKEN")
-    tg_manager_chat_id: str = Field("695432857", env="TG_MANAGER_CHAT_ID")
+    tg_bot_token: str = Field("", env="TG_BOT_TOKEN")
+    tg_manager_chat_id: str = Field("", env="TG_MANAGER_CHAT_ID")
     
     # Lookup Configuration
     lookup_source: LookupSource = Field(LookupSource.MOCK, env="LOOKUP_SOURCE")

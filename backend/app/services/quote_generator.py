@@ -273,6 +273,18 @@ class QuoteGenerator:
             margin: 8px 0;
             font-size: 14pt;
         }}
+        
+        /* Стили для ссылок */
+        .contact-link {{
+            color: #004277;
+            text-decoration: none;
+            font-weight: bold;
+        }}
+        
+        .contact-link:hover {{
+            color: #003366;
+            text-decoration: underline;
+        }}
         .footer {{
             margin-top: 30px;
             padding-top: 20px;
@@ -391,9 +403,9 @@ class QuoteGenerator:
             <h3>Готовы заказать?</h3>
             <p>Свяжитесь с нами для подтверждения заказа</p>
             <div class="contact-info">
-                <p><strong>Наш Telegram:</strong> {cta["contact_info"]["telegram"]}</p>
-                <p><strong>Телефон:</strong> {cta["contact_info"]["phone"]}</p>
-                <p><strong>WhatsApp:</strong> {cta["contact_info"]["whatsapp"]}</p>
+                <p><strong>Наш Telegram:</strong> <a href="https://t.me/rusfart1" class="contact-link" target="_blank">@rusfart1</a></p>
+                <p><strong>Телефон:</strong> <a href="tel:+79931401814" class="contact-link">{cta["contact_info"]["phone"]}</a></p>
+                <p><strong>WhatsApp:</strong> <a href="https://wa.me/79931401814" class="contact-link" target="_blank">{cta["contact_info"]["whatsapp"]}</a></p>
             </div>
         </div>
         

@@ -13,7 +13,6 @@ from app.models.schemas import LookupResult, PriceInfo, Prices, QtyBand, LeadTim
 def settings():
     """Test settings."""
     return Settings(
-        openai_api_key="test_key",
         tg_bot_token="test_token",
         tg_manager_chat_id="test_chat",
         lookup_source="sheets",

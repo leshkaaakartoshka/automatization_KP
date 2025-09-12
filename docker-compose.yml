@@ -9,7 +9,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TG_BOT_TOKEN=${TG_BOT_TOKEN}
       - TG_MANAGER_CHAT_ID=${TG_MANAGER_CHAT_ID}
       - LOOKUP_SOURCE=${LOOKUP_SOURCE:-mock}

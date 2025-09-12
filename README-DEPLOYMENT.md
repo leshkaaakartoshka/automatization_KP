@@ -175,7 +175,7 @@ psql -h localhost -U cpq_user -d cpq_db -f init.sql
 
 ```bash
 # Обязательные переменные
-OPENAI_API_KEY=sk-your-openai-key-here
+# OPENAI_API_KEY removed - not using OpenAI services
 TG_BOT_TOKEN=your-telegram-bot-token
 TG_MANAGER_CHAT_ID=your-telegram-chat-id
 

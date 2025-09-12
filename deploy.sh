@@ -26,7 +26,7 @@ if [ ! -f ".env" ]; then
     echo "⚠️  .env file not found. Creating from template..."
     cp env.example .env
     echo "📝 Please edit .env file with your configuration before running again."
-    echo "   Required variables: OPENAI_API_KEY, TG_BOT_TOKEN, TG_MANAGER_CHAT_ID"
+    echo "   Required variables: TG_BOT_TOKEN, TG_MANAGER_CHAT_ID"
     exit 1
 fi
 

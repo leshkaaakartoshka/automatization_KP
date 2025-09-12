@@ -4,7 +4,7 @@ FastAPI backend for CPQ (Configure, Price, Quote) system with AI-powered quote g
 
 ## Features
 
-- **Structured Quote Generation**: Uses OpenAI's structured outputs API with strict JSON schema validation
+- **Structured Quote Generation**: Uses AI-powered quote generation with strict JSON schema validation
 - **Flexible Lookup**: Supports both Google Sheets and PostgreSQL for price lookups
 - **PDF Generation**: Creates professional PDF quotes using WeasyPrint
 - **Telegram Integration**: Automatically sends generated quotes to Telegram
@@ -15,7 +15,7 @@ FastAPI backend for CPQ (Configure, Price, Quote) system with AI-powered quote g
 ## Tech Stack
 
 - **Runtime**: Python 3.11+, FastAPI, Uvicorn
-- **AI**: OpenAI Responses API with json_schema (strict)
+- **AI**: AI-powered quote generation with json_schema (strict)
 - **Lookup**: Google Sheets or PostgreSQL (configurable)
 - **PDF**: WeasyPrint with Cyrillic font support
 - **Messaging**: Telegram Bot API
@@ -48,8 +48,7 @@ nano .env
 ```
 
 Required environment variables:
-- `OPENAI_API_KEY`: Your OpenAI API key
-- `TG_BOT_TOKEN`: Telegram bot token
+- `TG_BOT_TOKEN`: Your Telegram bot token
 - `TG_MANAGER_CHAT_ID`: Telegram chat ID for notifications
 - `LOOKUP_SOURCE`: Either "sheets" or "postgres"
 - `BASE_URL`: Base URL for PDF serving (e.g., "http://localhost:8000")
