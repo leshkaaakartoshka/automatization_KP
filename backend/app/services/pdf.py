@@ -42,6 +42,11 @@ class PDFService:
             color: #333;
         }
         
+        /* Support for emoji characters */
+        .emoji {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "EmojiSymbols", "EmojiOne Mozilla", "Twemoji Mozilla", "Segoe UI Symbol", sans-serif;
+        }
+        
         .header {
             text-align: center;
             margin-bottom: 2cm;

@@ -69,14 +69,25 @@ class QuoteForm(BaseModel):
     # Material and print
     print: Optional[PrintType] = None
     
-    # Quantity
+    # Quantity and pricing
     qty: int = Field(..., ge=1, le=100000, description="Quantity")
-    sla_type: SLAType
+    sla_type: Optional[SLAType] = None  # Опциональное поле как дополнительный фильтр/категорию
+    delivery_days: int = Field(..., ge=1, description="Number of working days")
+    unit_price: float = Field(..., ge=0.01, le=1000000, description="Price per unit")
     batch_cost: Optional[int] = Field(None, ge=0, le=10000000)
     
     # Additional fields from frontend
     selected_tariff: Optional[str] = Field(None, max_length=50)
     final_price: Optional[float] = Field(None, ge=0)
+    
+    # Поля для ручного редактирования цен тарифов
+    custom_standard_price: Optional[float] = Field(None, ge=0)
+    custom_urgent_price: Optional[float] = Field(None, ge=0)
+    custom_strategic_price: Optional[float] = Field(None, ge=0)
+    # Поля для ручного редактирования сроков тарифов
+    custom_standard_days: Optional[int] = Field(None, ge=1)
+    custom_urgent_days: Optional[int] = Field(None, ge=1)
+    custom_strategic_days: Optional[int] = Field(None, ge=1)
     
     # Company information
     company: Optional[str] = Field(None, max_length=200)

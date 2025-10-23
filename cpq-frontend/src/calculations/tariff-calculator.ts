@@ -1,12 +1,19 @@
 // Калькулятор тарифов для расчета стоимости партии
 // Реализует 3 варианта тарифов: стандартный, срочный, стратегический
+// Новая логика: пользователь вводит сроки, система рассчитывает цены
 
 export type TariffType = 'standard' | 'urgent' | 'strategic';
 
 export interface TariffCalculation {
   standard: number;    // базовая цена без изменений
-  urgent: number;      // +100% к базовой цене
-  strategic: number;   // -10% от базовой цены
+  urgent: number;      // цена с учетом ускорения
+  strategic: number;   // цена со скидкой за увеличенный срок
+}
+
+export interface DeliveryDays {
+  standard: number;    // базовый срок
+  urgent: number;      // ускоренный срок (-50%)
+  strategic: number;   // увеличенный срок (+50%)
 }
 
 export interface TariffInfo {
@@ -15,13 +22,15 @@ export interface TariffInfo {
   description: string;
   multiplier: number;
   price: number;
+  deliveryDays: number;
+  deliveryDate?: string; // добавить отформатированную дату
 }
 
 /**
- * Рассчитывает все варианты тарифов на основе базовой цены
+ * Рассчитывает сроки доставки для всех тарифов на основе базового срока
  */
-export function calculateTariffs(basePrice: number): TariffCalculation {
-  if (basePrice <= 0) {
+export function calculateDeliveryDays(baseDays: number): DeliveryDays {
+  if (baseDays <= 0) {
     return {
       standard: 0,
       urgent: 0,
@@ -30,20 +39,51 @@ export function calculateTariffs(basePrice: number): TariffCalculation {
   }
 
   return {
-    standard: basePrice,                    // без изменений
-    urgent: basePrice * 2,                 // +100%
-    strategic: Math.round(basePrice * 0.9) // -10%, округляем до целого
+    standard: baseDays,                                    // базовый срок
+    urgent: Math.max(1, Math.floor(baseDays * 0.5)),     // -50% от срока
+    strategic: Math.ceil(baseDays * 1.5)                  // +50% к сроку
   };
+}
+
+/**
+ * Рассчитывает цены тарифов на основе сроков доставки
+ */
+export function calculateTariffsByDelivery(unitPrice: number, qty: number, deliveryDays: number): TariffCalculation {
+  if (unitPrice <= 0 || qty <= 0 || deliveryDays <= 0) {
+    return {
+      standard: 0,
+      urgent: 0,
+      strategic: 0
+    };
+  }
+
+  const basePrice = unitPrice * qty;
+  const urgentMultiplier = 1 + (deliveryDays * 0.1);  // Чем меньше срок, тем дороже
+  const strategicDiscount = 0.85;  // -15% за увеличенный срок
+
+  return {
+    standard: basePrice,
+    urgent: basePrice * urgentMultiplier,
+    strategic: basePrice * strategicDiscount
+  };
+}
+
+/**
+ * Рассчитывает все варианты тарифов на основе цены за единицу, количества и сроков
+ */
+export function calculateTariffs(unitPrice: number, qty: number, deliveryDays: number): TariffCalculation {
+  return calculateTariffsByDelivery(unitPrice, qty, deliveryDays);
 }
 
 /**
  * Получает информацию о тарифе (оптимизированная версия)
  */
-export function getTariffInfo(type: TariffType, basePrice: number, tariffs?: TariffCalculation): TariffInfo {
+export function getTariffInfo(type: TariffType, unitPrice: number, qty: number, deliveryDays: number, tariffs?: TariffCalculation): TariffInfo {
   // Используем переданные тарифы или рассчитываем новые
-  const calculatedTariffs = tariffs || calculateTariffs(basePrice);
+  const calculatedTariffs = tariffs || calculateTariffs(unitPrice, qty, deliveryDays);
+  const calculatedDeliveryDays = calculateDeliveryDays(deliveryDays);
   
-  const tariffMap: Record<TariffType, Omit<TariffInfo, 'price'>> = {
+  const tariffMap: Record<TariffType, Omit<TariffInfo, 'price' | 'deliveryDays'>> = {
     standard: {
       type: 'standard',
       name: 'Стандартный',
@@ -53,33 +93,59 @@ export function getTariffInfo(type: TariffType, basePrice: number, tariffs?: Tar
     urgent: {
       type: 'urgent',
       name: 'Срочный',
-      description: 'Увеличение на 100%',
-      multiplier: 2.0
+      description: 'Ускоренное изготовление',
+      multiplier: 1 + (deliveryDays * 0.1)
     },
     strategic: {
       type: 'strategic',
       name: 'Стратегический',
-      description: 'Скидка 10%',
-      multiplier: 0.9
+      description: 'Долгосрочное сотрудничество',
+      multiplier: 0.85
     }
   };
 
   return {
     ...tariffMap[type],
-    price: calculatedTariffs[type]
+    price: calculatedTariffs[type],
+    deliveryDays: calculatedDeliveryDays[type]
   };
 }
 
 /**
  * Получает все варианты тарифов с информацией (оптимизированная версия)
  */
-export function getAllTariffInfos(basePrice: number): TariffInfo[] {
+export function getAllTariffInfos(unitPrice: number, qty: number, deliveryDays: number): TariffInfo[] {
   // Рассчитываем тарифы только один раз
-  const tariffs = calculateTariffs(basePrice);
+  const tariffs = calculateTariffs(unitPrice, qty, deliveryDays);
   
   return ['standard', 'urgent', 'strategic'].map(type => 
-    getTariffInfo(type as TariffType, basePrice, tariffs)
+    getTariffInfo(type as TariffType, unitPrice, qty, deliveryDays, tariffs)
   );
+}
+
+/**
+ * Применяет пользовательские цены к рассчитанным тарифам
+ */
+export function applyCustomPrices(tariffs: TariffCalculation, customPrices: Record<TariffType, number | null>): TariffCalculation {
+  return {
+    standard: customPrices.standard ?? tariffs.standard,
+    urgent: customPrices.urgent ?? tariffs.urgent,
+    strategic: customPrices.strategic ?? tariffs.strategic
+  };
+}
+
+/**
+ * Применяет пользовательские сроки к рассчитанным срокам
+ */
+export function applyCustomDeliveryDays(
+  calculatedDays: DeliveryDays, 
+  customDays: Record<TariffType, number | null>
+): DeliveryDays {
+  return {
+    standard: customDays.standard ?? calculatedDays.standard,
+    urgent: customDays.urgent ?? calculatedDays.urgent,
+    strategic: customDays.strategic ?? calculatedDays.strategic
+  };
 }
 
 /**
@@ -95,12 +161,13 @@ export function formatPrice(price: number): string {
 /**
  * Получает разницу между тарифами
  */
-export function getTariffDifference(basePrice: number, selectedTariff: TariffType): {
+export function getTariffDifference(unitPrice: number, qty: number, deliveryDays: number, selectedTariff: TariffType): {
   difference: number;
   percentage: number;
   isIncrease: boolean;
 } {
-  const tariffs = calculateTariffs(basePrice);
+  const tariffs = calculateTariffs(unitPrice, qty, deliveryDays);
+  const basePrice = unitPrice * qty;
   const selectedPrice = tariffs[selectedTariff];
   const difference = selectedPrice - basePrice;
   const percentage = basePrice > 0 ? Math.round((difference / basePrice) * 100) : 0;
@@ -113,30 +180,23 @@ export function getTariffDifference(basePrice: number, selectedTariff: TariffTyp
 }
 
 /**
- * Валидирует базовую цену
+ * Валидирует цену за единицу
  */
-export function validateBasePrice(price: number): {
+export function validateUnitPrice(price: number): {
   isValid: boolean;
   error?: string;
 } {
-  if (price < 0) {
+  if (price < 0.01) {
     return {
       isValid: false,
-      error: 'Цена не может быть отрицательной'
+      error: 'Цена за единицу должна быть не менее 0.01 руб'
     };
   }
   
-  if (price > 10000000) {
+  if (price > 1000000) {
     return {
       isValid: false,
-      error: 'Цена слишком большая (максимум 10,000,000 руб)'
-    };
-  }
-  
-  if (!Number.isInteger(price)) {
-    return {
-      isValid: false,
-      error: 'Цена должна быть целым числом'
+      error: 'Цена за единицу слишком большая (максимум 1,000,000 руб)'
     };
   }
   

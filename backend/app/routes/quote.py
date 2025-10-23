@@ -52,6 +52,8 @@ async def generate_quote(
     start_time = time.time()
     lead_id = None
     
+    print(f"Received quote request: {quote_form.model_dump()}")
+    
     try:
         # Initialize services
         lookup_provider = get_lookup_provider(settings)

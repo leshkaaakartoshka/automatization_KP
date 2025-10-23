@@ -40,43 +40,41 @@ class TelegramService:
             if not file_path_obj.exists():
                 raise FileNotFoundError(f"PDF file not found: {file_path}")
             
-            # Prepare the file for upload
-            files = {
-                'document': (
-                    file_path_obj.name,
-                    open(file_path, 'rb'),
-                    'application/pdf'
-                )
-            }
-            
-            data = {
-                'chat_id': self.chat_id,
-                'caption': caption,
-                'parse_mode': 'HTML'
-            }
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{self.api_url}/sendDocument",
-                    data=data,
-                    files=files
-                )
+            # Prepare the file for upload with proper context management
+            with open(file_path, 'rb') as file:
+                files = {
+                    'document': (
+                        file_path_obj.name,
+                        file,
+                        'application/pdf'
+                    )
+                }
                 
-                # Close the file
-                files['document'][1].close()
+                data = {
+                    'chat_id': self.chat_id,
+                    'caption': caption,
+                    'parse_mode': 'HTML'
+                }
                 
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get('ok', False):
-                        print(f"✅ PDF successfully sent to Telegram for lead {lead_id}")
-                        return True
-                    else:
-                        print(f"❌ Telegram API returned error for lead {lead_id}: {result}")
-                        return False
-                else:
-                    print(f"❌ Telegram API HTTP error for lead {lead_id}: {response.status_code} - {response.text}")
-                    return False
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        f"{self.api_url}/sendDocument",
+                        data=data,
+                        files=files
+                    )
                     
+                    if response.status_code == 200:
+                        result = response.json()
+                        if result.get('ok', False):
+                            print(f"✅ PDF successfully sent to Telegram for lead {lead_id}")
+                            return True
+                        else:
+                            print(f"❌ Telegram API returned error for lead {lead_id}: {result}")
+                            return False
+                    else:
+                        print(f"❌ Telegram API HTTP error for lead {lead_id}: {response.status_code} - {response.text}")
+                        return False
+                        
         except Exception as e:
             print(f"Failed to send PDF to Telegram for lead {lead_id}: {e}")
             return False

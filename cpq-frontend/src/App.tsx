@@ -3,9 +3,10 @@ import './index.css';
 import { useForm } from 'react-hook-form';
 import { IMaskInput } from 'react-imask';
 import { FormField, FormRow, ResultCard, StatusBar } from './components/FormPrimitives';
-import { fefcoFoldingOptions, fefcoWrappingOptions, fefcoAuxiliaryOptions, cardboardTypeOptions, cardboardGradeOptions, printOptions, slaOptions, type QuoteFormData } from './validation';
+import { fefcoFoldingOptions, fefcoWrappingOptions, fefcoAuxiliaryOptions, cardboardTypeOptions, cardboardGradeOptions, printOptions, type QuoteFormData } from './validation';
 import { postQuote, type ApiResponse } from './api';
-import { calculateTariffs, getAllTariffInfos, formatPrice, type TariffType } from './calculations/tariff-calculator';
+import { calculateTariffs, getAllTariffInfos, applyCustomPrices, type TariffType } from './calculations/tariff-calculator';
+import { useLocalStorage } from './utils/useLocalStorage';
 
 type Status = 'idle' | 'loading' | 'success' | 'error';
 
@@ -32,8 +33,16 @@ function App() {
     mode: 'all',
     defaultValues: {
       print: undefined,
+      unit_price: 0,
     },
   });
+
+  const [status, setStatus] = useState<Status>('idle');
+  const [result, setResult] = useState<ApiResponse | null>(null);
+  const [customPrices, setCustomPrices] = useState<Record<TariffType, number | null>>({} as Record<TariffType, number | null>);
+  const [customDays, setCustomDays] = useState<Record<TariffType, number | null>>({} as Record<TariffType, number | null>);
+  const abortRef = useRef<AbortController | null>(null);
+  const hasRestoredRef = useRef(false);
 
   // Keep form validation in sync - только при изменении полей формы
   useEffect(() => {
@@ -46,10 +55,89 @@ function App() {
     return () => subscription.unsubscribe();
   }, [watch, trigger]);
 
-  const [status, setStatus] = useState<Status>('idle');
-  const [result, setResult] = useState<ApiResponse | null>(null);
-  const [selectedTariff, setSelectedTariff] = useState<TariffType>('standard');
-  const abortRef = useRef<AbortController | null>(null);
+  // Автосохранение данных формы
+  const [formData, setFormData, clearFormData] = useLocalStorage('cpq-form-data', {} as Partial<QuoteFormData>);
+  const [tariffState, setTariffState, clearTariffState] = useLocalStorage('cpq-tariff-state', {
+    customPrices: {} as Record<TariffType, number | null>,
+    customDays: {} as Record<TariffType, number | null>,
+  });
+
+  // Восстановление сохраненных данных при монтировании компонента
+  useEffect(() => {
+    if (hasRestoredRef.current) return; // Only run once
+    hasRestoredRef.current = true;
+    
+    // Восстанавливаем данные формы
+    if (Object.keys(formData).length > 0) {
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          setValue(key as keyof QuoteFormData, value);
+        }
+      });
+    }
+
+    // Восстанавливаем состояние тарифов
+    if (Object.keys(tariffState.customPrices).length > 0) {
+      setCustomPrices(tariffState.customPrices);
+    }
+    if (Object.keys(tariffState.customDays).length > 0) {
+      setCustomDays(tariffState.customDays);
+    }
+  }, []); // Empty deps - run only on mount
+
+  // Автосохранение данных формы при изменении
+  useEffect(() => {
+    const subscription = watch((formValues) => {
+      // Исключаем пустые значения и сохраняем только заполненные поля
+      const filteredData = Object.fromEntries(
+        Object.entries(formValues).filter(([_, value]) => 
+          value !== undefined && value !== null && value !== ''
+        )
+      );
+      setFormData(filteredData);
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, setFormData]);
+
+  // Автосохранение состояния тарифов при изменении
+  useEffect(() => {
+    setTariffState({
+      customPrices,
+      customDays,
+    });
+  }, [customPrices, customDays, setTariffState]);
+
+  // Функция для полной очистки формы и сохраненных данных
+  const clearForm = () => {
+    // Сбрасываем форму к начальным значениям
+    setValue('fefco', '');
+    setValue('cardboard_type', '');
+    setValue('cardboard_grade', '');
+    setValue('x_mm', 0);
+    setValue('y_mm', 0);
+    setValue('z_mm', 0);
+    setValue('print', '');
+    setValue('qty', 0);
+    setValue('delivery_days', 0);
+    setValue('unit_price', 0);
+    setValue('company', '');
+    setValue('contact_name', '');
+    setValue('city', '');
+    setValue('phone', '');
+    setValue('email', '');
+    
+    // Сбрасываем состояние тарифов
+    setCustomPrices({} as Record<TariffType, number | null>);
+    setCustomDays({} as Record<TariffType, number | null>);
+    
+    // Очищаем localStorage
+    clearFormData();
+    clearTariffState();
+    
+    // Сбрасываем статус
+    setStatus('idle');
+    setResult(null);
+  };
 
   const onSubmit = handleSubmit(async (values) => {
     // eslint-disable-next-line no-console
@@ -61,10 +149,20 @@ function App() {
     abortRef.current = new AbortController();
     
     // Добавляем информацию о тарифе к данным формы
+    const finalTariffs = applyCustomPrices(tariffs, customPrices);
     const payload = {
       ...values,
-      selected_tariff: selectedTariff,
-      final_price: tariffs[selectedTariff],
+      batch_cost: batchCost, // Добавляем рассчитанную стоимость партии
+      selected_tariff: 'standard', // Всегда отправляем стандартный тариф
+      final_price: finalTariffs['standard'],
+      // Добавляем пользовательские цены
+      custom_standard_price: customPrices.standard ?? undefined,
+      custom_urgent_price: customPrices.urgent ?? undefined,
+      custom_strategic_price: customPrices.strategic ?? undefined,
+      // Добавляем пользовательские сроки
+      custom_standard_days: customDays.standard ?? undefined,
+      custom_urgent_days: customDays.urgent ?? undefined,
+      custom_strategic_days: customDays.strategic ?? undefined,
       consent_given: true, // Добавляем согласие на обработку данных
       // Убираем пустые строки для необязательных полей
       cardboard_grade: values.cardboard_grade || undefined,
@@ -82,6 +180,9 @@ function App() {
       pushEvent({ event: 'cpq_api_ok', lead_id: res.lead_id });
       setResult(res);
       setStatus('success');
+      // Очищаем сохраненные данные после успешной отправки
+      clearFormData();
+      clearTariffState();
     } else {
       pushEvent({ event: 'cpq_api_error', message: res.error });
       setResult(res);
@@ -92,17 +193,21 @@ function App() {
   const cardboardTypeItems = useMemo(() => cardboardTypeOptions, []);
   const cardboardGradeItems = useMemo(() => cardboardGradeOptions, []);
   const printItems = useMemo(() => printOptions, []);
-  const slaItems = useMemo(() => slaOptions, []);
 
   // Получаем выбранный тип картона для условного отображения марки
   const watchedCardboardType = watch('cardboard_type');
   
-  // Получаем базовую стоимость для расчета тарифов
-  const watchedBatchCost = watch('batch_cost') || 0;
+  // Получаем цену за единицу, количество и сроки для расчета тарифов
+  const watchedUnitPrice = watch('unit_price') || 0;
+  const watchedQty = watch('qty') || 0;
+  const watchedDeliveryDays = watch('delivery_days') || 0;
+  
+  // Рассчитываем стоимость партии автоматически
+  const batchCost = useMemo(() => watchedUnitPrice * watchedQty, [watchedUnitPrice, watchedQty]);
   
   // Рассчитываем все варианты тарифов с мемоизацией
-  const tariffs = useMemo(() => calculateTariffs(watchedBatchCost), [watchedBatchCost]);
-  const tariffInfos = useMemo(() => getAllTariffInfos(watchedBatchCost), [watchedBatchCost]);
+  const tariffs = useMemo(() => calculateTariffs(watchedUnitPrice, watchedQty, watchedDeliveryDays), [watchedUnitPrice, watchedQty, watchedDeliveryDays]);
+  const tariffInfos = useMemo(() => getAllTariffInfos(watchedUnitPrice, watchedQty, watchedDeliveryDays), [watchedUnitPrice, watchedQty, watchedDeliveryDays]);
 
   return (
     <main className="mx-auto max-w-3xl p-4">
@@ -208,65 +313,94 @@ function App() {
           </FormRow>
 
           <FormRow>
-            <FormField id="sla_type" label="Срок" required error={errors.sla_type?.message}>
-              <select className="w-full rounded-md border px-3 py-2" {...register('sla_type')}>
-                <option value="">— выберите —</option>
-                {slaItems.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField id="batch_cost" label="Стоимость партии" error={errors.batch_cost?.message}>
+            <FormField id="delivery_days" label="Кол-во рабочих дней" required error={errors.delivery_days?.message}>
               <input
                 type="number"
                 inputMode="numeric"
-                min={0}
-                max={10000000}
+                min={1}
                 step={1}
-                placeholder="0"
+                placeholder="10"
                 className="w-full rounded-md border px-3 py-2"
-                {...register('batch_cost', { valueAsNumber: true })}
+                {...register('delivery_days', { valueAsNumber: true })}
+              />
+            </FormField>
+
+            <FormField id="unit_price" label="Цена за единицу коробки" required error={errors.unit_price?.message}>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0.01}
+                max={1000000}
+                step={0.01}
+                placeholder="0.00"
+                className="w-full rounded-md border px-3 py-2"
+                {...register('unit_price', { valueAsNumber: true })}
               />
             </FormField>
           </FormRow>
 
+
           {/* Переключатель тарифов */}
-          {watchedBatchCost > 0 && (
+          {watchedUnitPrice > 0 && watchedDeliveryDays > 0 && (
             <FormRow>
-              <FormField id="tariff_selection" label="Выберите тариф">
+              <FormField id="tariff_selection" label="Доступные тарифы">
                 <div className="space-y-3">
                   {tariffInfos.map((tariff) => (
-                    <label
+                    <div
                       key={tariff.type}
-                      className={`flex items-center p-3 rounded-md border cursor-pointer transition-colors ${
-                        selectedTariff === tariff.type
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}
+                      className="p-3 rounded-md border border-gray-300 bg-gray-50"
                     >
-                      <input
-                        type="radio"
-                        name="tariff"
-                        value={tariff.type}
-                        checked={selectedTariff === tariff.type}
-                        onChange={(e) => setSelectedTariff(e.target.value as TariffType)}
-                        className="mr-3"
-                      />
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">
-                          {tariff.name}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {tariff.description}
+                      <div className="flex items-center">
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">
+                            {tariff.name}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {tariff.description} • {tariff.deliveryDays} рабочих дней
+                          </div>
                         </div>
                       </div>
-                      <div className="text-lg font-bold text-gray-900">
-                        {formatPrice(tariff.price)} руб
+                      
+                      <div className="mt-2 flex items-center gap-4">
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-sm text-gray-600">Цена:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder={tariff.price.toString()}
+                            value={customPrices[tariff.type] ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? null : Number(e.target.value);
+                              setCustomPrices(prev => ({
+                                ...prev,
+                                [tariff.type]: value
+                              }));
+                            }}
+                            className="flex-1 rounded border px-2 py-1 text-sm"
+                          />
+                          <span className="text-sm text-gray-600">руб</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-sm text-gray-600">Срок:</span>
+                          <input
+                            type="number"
+                            placeholder={tariff.deliveryDays.toString()}
+                            value={customDays[tariff.type] ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value === '' ? null : Number(e.target.value);
+                              setCustomDays(prev => ({
+                                ...prev,
+                                [tariff.type]: value
+                              }));
+                            }}
+                            className="flex-1 rounded border px-2 py-1 text-sm"
+                          />
+                          <span className="text-sm text-gray-600">дней</span>
+                        </div>
                       </div>
-                    </label>
+                    </div>
                   ))}
                 </div>
               </FormField>
@@ -325,6 +459,13 @@ function App() {
             className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-2"
           >
             Сформировать КП
+          </button>
+          <button
+            type="button"
+            onClick={clearForm}
+            className="inline-flex items-center rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-2"
+          >
+            Очистить форму
           </button>
           {status === 'error' && (
             <button

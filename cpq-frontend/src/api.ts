@@ -24,6 +24,8 @@ export async function postQuote(payload: QuoteFormPayload, signal?: AbortSignal)
   // debug: ensure submission executed in tests
   // eslint-disable-next-line no-console
   console.log('postQuote called', payload);
+  console.log('Sending request to:', `${API_BASE}/api/quote`);
+  console.log('Request payload:', JSON.stringify(payload, null, 2));
   
   try {
     // Создаем AbortController с timeout если не передан signal
@@ -52,8 +54,21 @@ export async function postQuote(payload: QuoteFormPayload, signal?: AbortSignal)
       const text = await res.text().catch(() => '');
       return { ok: false, error: `Unexpected response: ${text || res.statusText}` };
     }
-    const json = (await res.json()) as ApiResponse;
-    return json;
+    const json = await res.json();
+    
+    // Если статус не 200, обрабатываем как ошибку
+    if (!res.ok) {
+      if (res.status === 422 && json.detail) {
+        // Ошибка валидации - форматируем сообщения
+        const validationErrors = Array.isArray(json.detail) 
+          ? json.detail.map((err: any) => `${err.loc?.join('.')}: ${err.msg}`).join('; ')
+          : json.detail;
+        return { ok: false, error: `Ошибка валидации: ${validationErrors}` };
+      }
+      return { ok: false, error: json.error || json.message || `HTTP ${res.status}: ${res.statusText}` };
+    }
+    
+    return json as ApiResponse;
   } catch (error) {
     // Обрабатываем различные типы ошибок
     if (error instanceof Error) {

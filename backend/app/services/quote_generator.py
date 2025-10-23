@@ -6,6 +6,7 @@ from typing import Dict, Any
 from app.models.schemas import QuoteForm, LookupResult
 from app.utils.hash import generate_lead_id
 from app.utils.qr_images import get_default_qr_codes, get_company_logo
+from app.utils.workdays import get_tariff_delivery_dates
 
 
 class QuoteGenerator:
@@ -31,46 +32,62 @@ class QuoteGenerator:
             Dictionary with quote data
         """
         lead_id = generate_lead_id()
-        valid_until = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+        valid_until = (datetime.now() + timedelta(hours=72)).strftime("%Y-%m-%d")
         
-        # Generate options based on frontend data (final_price and selected_tariff)
-        # Calculate prices based on frontend data
-        base_price = quote_form.batch_cost or 0
-        if base_price > 0 and quote_form.final_price:
-            # Use frontend calculated prices
-            standard_price = quote_form.final_price if quote_form.selected_tariff == "standard" else base_price
-            urgent_price = base_price * 2  # +100% for urgent
-            strategic_price = base_price * 0.9  # -10% for strategic
-        else:
-            # Fallback to lookup result
-            standard_price = lookup_result.prices.std.price_per_unit * quote_form.qty
-            urgent_price = lookup_result.prices.rush.price_per_unit * quote_form.qty
-            strategic_price = lookup_result.prices.strategic.price_per_unit * quote_form.qty
+        # Calculate prices based on unit_price from frontend
+        unit_price = quote_form.unit_price
+        qty = quote_form.qty
+        delivery_days = quote_form.delivery_days
+        
+        # Get delivery dates for all tariffs based on user input
+        delivery_dates = get_tariff_delivery_dates(
+            delivery_days,
+            custom_standard_days=quote_form.custom_standard_days,
+            custom_urgent_days=quote_form.custom_urgent_days,
+            custom_strategic_days=quote_form.custom_strategic_days
+        )
+        
+        # Calculate base prices for each tariff
+        base_price = unit_price * qty
+        
+        # Use custom prices if provided, otherwise calculate based on delivery days
+        standard_price = quote_form.custom_standard_price or base_price
+        urgent_price = quote_form.custom_urgent_price or (base_price * (1 + (delivery_days * 0.1)))
+        strategic_price = quote_form.custom_strategic_price or (base_price * 0.85)
         
         options = [
             {
                 "name": "Стандарт",
-                "price_per_unit_rub": standard_price / quote_form.qty if quote_form.qty > 0 else 0,
+                "price_per_unit_rub": standard_price / qty,
                 "total_price": standard_price,
-                "lead_time": lookup_result.lead_time.std,
+                "lead_time": f"{delivery_dates['standard']['days']} рабочих дней",
+                "delivery_date": delivery_dates['standard']['formatted_date'],
                 "margin_pct": 0,
-                "notes": ["Стандартные сроки изготовления", "Базовая цена"]
+                "notes": ["Стандартные сроки изготовления", "Базовая цена"],
+                "is_custom_price": quote_form.custom_standard_price is not None,
+                "is_custom_days": quote_form.custom_standard_days is not None
             },
             {
                 "name": "Срочно",
-                "price_per_unit_rub": urgent_price / quote_form.qty if quote_form.qty > 0 else 0,
+                "price_per_unit_rub": urgent_price / qty,
                 "total_price": urgent_price,
-                "lead_time": lookup_result.lead_time.rush,
+                "lead_time": f"{delivery_dates['urgent']['days']} рабочих дней",
+                "delivery_date": delivery_dates['urgent']['formatted_date'],
                 "margin_pct": 0,
-                "notes": ["Ускоренное изготовление", "Дополнительная плата за срочность"]
+                "notes": ["Ускоренное изготовление", "Дополнительная плата за срочность"],
+                "is_custom_price": quote_form.custom_urgent_price is not None,
+                "is_custom_days": quote_form.custom_urgent_days is not None
             },
             {
                 "name": "Стратегический",
-                "price_per_unit_rub": strategic_price / quote_form.qty if quote_form.qty > 0 else 0,
+                "price_per_unit_rub": strategic_price / qty,
                 "total_price": strategic_price,
-                "lead_time": lookup_result.lead_time.strategic,
+                "lead_time": f"{delivery_dates['strategic']['days']} рабочих дней",
+                "delivery_date": delivery_dates['strategic']['formatted_date'],
                 "margin_pct": 0,
-                "notes": ["Долгосрочное сотрудничество", "Специальные условия"]
+                "notes": ["Долгосрочное сотрудничество", "Специальные условия"],
+                "is_custom_price": quote_form.custom_strategic_price is not None,
+                "is_custom_days": quote_form.custom_strategic_days is not None
             }
         ]
         
@@ -80,7 +97,6 @@ class QuoteGenerator:
         # Generate important notes
         important = [
             f"Предложение действительно до {valid_until}",
-            "Минимальный заказ: 50 шт",
             "Возможна доставка по всей России"
         ]
         
@@ -105,7 +121,7 @@ class QuoteGenerator:
         # Generate HTML content
         html_content = self._generate_html_content(
             quote_form, lookup_result, lead_id, valid_until, options, 
-            what_included, important, cta
+            what_included, important, cta, delivery_dates
         )
         
         return {
@@ -139,7 +155,8 @@ class QuoteGenerator:
         options: list,
         what_included: list,
         important: list,
-        cta: dict
+        cta: dict,
+        delivery_dates: dict
     ) -> str:
         """Generate HTML content for PDF."""
         
@@ -212,28 +229,32 @@ class QuoteGenerator:
             color: #111827;
             font-size: 16pt;
         }}
-        .pricing-options {{
-            display: flex;
-            justify-content: space-between;
-            margin: 15px 0;
+        .tariff-list {{
+            margin: 20px 0;
         }}
-        .pricing-option {{
-            text-align: center;
-            padding: 15px;
+        .tariff-item {{
             border: 2px solid #e5e7eb;
             border-radius: 8px;
-            flex: 1;
-            margin: 0 5px;
+            padding: 20px;
+            margin: 15px 0;
+            background-color: #f9fafb;
         }}
-        .pricing-option h4 {{
-            margin: 0 0 10px 0;
-            color: #111827;
-            font-size: 14pt;
-        }}
-        .pricing-option .price {{
-            font-size: 18pt;
+        .tariff-header {{
+            font-size: 16pt;
             font-weight: bold;
-            color: #004277;
+            color: #111827;
+            margin-bottom: 10px;
+        }}
+        .tariff-calculation {{
+            font-size: 14pt;
+            color: #374151;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+        }}
+        .tariff-timeline {{
+            font-size: 12pt;
+            color: #6b7280;
+            margin: 8px 0;
         }}
         .section {{
             margin-bottom: 25px;
@@ -276,13 +297,13 @@ class QuoteGenerator:
         
         /* Стили для ссылок */
         .contact-link {{
-            color: #004277;
+            color: #ffffff;
             text-decoration: none;
             font-weight: bold;
         }}
         
         .contact-link:hover {{
-            color: #003366;
+            color: #e0e0e0;
             text-decoration: underline;
         }}
         .footer {{
@@ -367,19 +388,37 @@ class QuoteGenerator:
                 <li>Марка картона: {quote_form.cardboard_grade or "не указана"}</li>
                 <li>Печать: {quote_form.print.value if quote_form.print else "Нет"}</li>
                 <li>Количество: {quote_form.qty:,} шт</li>
+                <li>Размеры коробки: {quote_form.x_mm} мм/{quote_form.y_mm} мм/{quote_form.z_mm} мм</li>
             </ol>
         </div>
         
         <div class="pricing-section">
             <h3>Мы предлагаем всем клиентам сотрудничество в трех вариантах цены:</h3>
-            <div class="pricing-options">
+            <div class="tariff-list">
         """
         
+        # Generate tariff items with emojis and detailed calculations
+        tariff_emojis = {
+            "Стандарт": "✅",
+            "Срочно": "🔥", 
+            "Стратегический": "💪"
+        }
+        
         for option in options:
+            emoji = tariff_emojis.get(option["name"], "•")
+            custom_price_indicator = " (цена настроена)" if option.get("is_custom_price", False) else ""
+            custom_days_indicator = " (срок настроен)" if option.get("is_custom_days", False) else ""
+            indicators = custom_price_indicator + custom_days_indicator
             html += f"""
-                <div class="pricing-option">
-                    <h4>{option["name"]}</h4>
-                    <div class="price">{option["total_price"]:,.0f} руб</div>
+                <div class="tariff-item">
+                    <div class="tariff-header">{emoji} {option["name"].lower()}:{indicators}</div>
+                    <div class="tariff-calculation">
+                        {option["price_per_unit_rub"]:,.2f} руб × {quote_form.qty:,} шт = {option["total_price"]:,.0f} руб
+                    </div>
+                    <div class="tariff-timeline">
+                        Сроки работ: {option["lead_time"]}<br>
+                        Готовность: {option["delivery_date"]}
+                    </div>
                 </div>
             """
         

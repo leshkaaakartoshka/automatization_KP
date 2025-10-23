@@ -25,10 +25,20 @@ export interface QuoteFormPayload {
   z_mm: number;
   print?: Print;
   qty: number;
-  sla_type: SlaType;
-  batch_cost?: number; // Базовая стоимость партии
+  sla_type?: SlaType; // Опциональное поле как дополнительный фильтр/категорию
+  delivery_days: number; // Количество рабочих дней, введенное пользователем
+  unit_price: number; // Цена за единицу коробки
+  batch_cost?: number; // Базовая стоимость партии (рассчитывается автоматически)
   selected_tariff?: TariffType; // Выбранный тариф
   final_price?: number; // Итоговая цена с учетом тарифа
+  // Поля для ручного редактирования цен тарифов
+  custom_standard_price?: number;
+  custom_urgent_price?: number;
+  custom_strategic_price?: number;
+  // Поля для ручного редактирования сроков тарифов
+  custom_standard_days?: number;
+  custom_urgent_days?: number;
+  custom_strategic_days?: number;
   company?: string;
   contact_name?: string;
   city?: string;
