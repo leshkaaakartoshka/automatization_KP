@@ -39,9 +39,11 @@ def get_default_qr_codes() -> dict:
     Returns:
         Словарь с base64 данными QR кодов
     """
-    # Пути к QR изображениям
-    telegram_qr_path = "/home/russian-bogatyr/Рабочий стол/test_cursor/cpq-frontend/Telegram.jpg"
-    whatsapp_qr_path = "/home/russian-bogatyr/Рабочий стол/test_cursor/cpq-frontend/WhatsApp.jpg"
+    # Определяем путь к статическим изображениям внутри backend/app/static
+    app_dir = Path(__file__).resolve().parents[1]
+    static_dir = app_dir / "static"
+    telegram_qr_path = str(static_dir / "Telegram.jpg")
+    whatsapp_qr_path = str(static_dir / "WhatsApp.jpg")
     
     return {
         "telegram_qr": load_image_as_base64(telegram_qr_path),
@@ -56,5 +58,7 @@ def get_company_logo() -> Optional[str]:
     Returns:
         Base64 строка с логотипом или None если файл не найден
     """
-    logo_path = "/home/russian-bogatyr/Рабочий стол/test_cursor/cpq-frontend/rusfart_logo_pdf.png"
+    app_dir = Path(__file__).resolve().parents[1]
+    static_dir = app_dir / "static"
+    logo_path = str(static_dir / "rusfart_logo_pdf.png")
     return load_image_as_base64(logo_path)

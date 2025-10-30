@@ -24,6 +24,18 @@ class PDFService:
     def _get_css_styles(self) -> str:
         """Get CSS styles for PDF generation."""
         return """
+        @font-face {
+            font-family: "DejaVuSans";
+            src: local("DejaVu Sans"),
+                 url("file:///usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") format("truetype");
+            font-weight: 400; font-style: normal;
+        }
+        @font-face {
+            font-family: "DejaVuSans";
+            src: local("DejaVu Sans Bold"),
+                 url("file:///usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf") format("truetype");
+            font-weight: 700; font-style: normal;
+        }
         @page {
             size: A4;
             margin: 2cm;
@@ -36,16 +48,17 @@ class PDFService:
         }
         
         body {
-            font-family: Arial, sans-serif;
+            font-family: "DejaVu Sans", "Liberation Sans", Arial, Helvetica, "Noto Sans", "Nimbus Sans", sans-serif;
+            letter-spacing: 0;
+            word-spacing: 0;
+            font-kerning: normal;
+            font-variant-numeric: normal;
+            font-feature-settings: normal;
             font-size: 11pt;
             line-height: 1.4;
             color: #333;
         }
         
-        /* Support for emoji characters */
-        .emoji {
-            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "EmojiSymbols", "EmojiOne Mozilla", "Twemoji Mozilla", "Segoe UI Symbol", sans-serif;
-        }
         
         .header {
             text-align: center;
@@ -168,6 +181,12 @@ class PDFService:
             font-size: 14pt;
             font-weight: bold;
             margin: 0.5cm 0;
+        }
+
+        /* Ensure contact numbers render white and bold on blue background */
+        .contact-info p {
+            color: #ffffff;
+            font-weight: 700;
         }
         
         .footer {

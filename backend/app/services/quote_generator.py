@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
+import base64
+from pathlib import Path
 
 from app.models.schemas import QuoteForm, LookupResult
 from app.utils.hash import generate_lead_id
@@ -184,6 +186,22 @@ class QuoteGenerator:
         else:
             greeting_text = "Доброго времени суток! Благодарим вас за выбор нашей компании, чтобы наше сотрудничество было наиболее для вас удобным продублировали для вас ваш заказ:"
         
+        # Prepare SVG emoji data URIs
+        emoji_paths = {
+            "Стандарт": "/home/russian-bogatyr/Рабочий стол/automatization_KP/backend/app/static/emoji/checkpoint.svg",
+            "Срочно": "/home/russian-bogatyr/Рабочий стол/automatization_KP/backend/app/static/emoji/fire.svg",
+            "Стратегический": "/home/russian-богатyr/Рабочий стол/automatization_KP/backend/app/static/emoji/biceps.svg"
+        }
+        emoji_data_uris: Dict[str, str] = {}
+        for name, p in emoji_paths.items():
+            try:
+                svg_bytes = Path(p).read_bytes()
+                b64 = base64.b64encode(svg_bytes).decode("utf-8")
+                emoji_data_uris[name] = f"data:image/svg+xml;base64,{b64}"
+            except Exception:
+                # If file is missing, skip icon for this tariff
+                pass
+
         html = f"""
 <!DOCTYPE html>
 <html>
@@ -191,8 +209,25 @@ class QuoteGenerator:
     <meta charset="UTF-8">
     <title>Коммерческое предложение {lead_id}</title>
     <style>
+        @font-face {{
+            font-family: "DejaVuSans";
+            src: local("DejaVu Sans"),
+                 url("file:///usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") format("truetype");
+            font-weight: 400; font-style: normal;
+        }}
+        @font-face {{
+            font-family: "DejaVuSans";
+            src: local("DejaVu Sans Bold"),
+                 url("file:///usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf") format("truetype");
+            font-weight: 700; font-style: normal;
+        }}
         body {{
-            font-family: Arial, sans-serif;
+            font-family: "DejaVu Sans", "Liberation Sans", Arial, Helvetica, "Noto Sans", "Nimbus Sans", sans-serif;
+            letter-spacing: 0;
+            word-spacing: 0;
+            font-kerning: normal;
+            font-variant-numeric: normal;
+            font-feature-settings: normal;
             margin: 0;
             padding: 20px;
             background-color: #f5f5f5;
@@ -303,6 +338,20 @@ class QuoteGenerator:
         .contact-info p {{
             margin: 8px 0;
             font-size: 14pt;
+            color: #ffffff;
+            font-weight: 700;
+        }}
+        /* Numeric tabular alignment utility */
+        .nums {{
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: 'tnum' 1, 'lnum' 1;
+        }}
+        /* Inline emoji icon */
+        .emoji-img {{
+            width: 18px;
+            height: 18px;
+            vertical-align: -3px;
+            margin-right: 6px;
         }}
         
         /* Стили для ссылок */
@@ -408,7 +457,7 @@ class QuoteGenerator:
         
         <div class="order-info">
             <h3>Ваш заказ:</h3>
-            <ol class="order-list">
+            <ol class="order-list nums">
                 <li>Код FEFCO: {quote_form.fefco.value}</li>
                 <li>Тип картона: {quote_form.cardboard_type.value}</li>
                 <li>Марка картона: {quote_form.cardboard_grade or "не указано"}</li>
@@ -428,15 +477,11 @@ class QuoteGenerator:
             <div class="tariff-list">
         """
             
-            # Generate tariff items with emojis and detailed calculations
-            tariff_emojis = {
-                "Стандарт": "✅",
-                "Срочно": "🔥", 
-                "Стратегический": "💪"
-            }
+            # Generate tariff items with SVG icons
             
             for option in options:
-                emoji = tariff_emojis.get(option["name"], "•")
+                img_src = emoji_data_uris.get(option["name"]) or ""
+                emoji_html = f'<img src="{img_src}" class="emoji-img" alt="" />' if img_src else ""
                 custom_price_indicator = " (цена настроена)" if option.get("is_custom_price", False) else ""
                 custom_days_indicator = " (срок настроен)" if option.get("is_custom_days", False) else ""
                 indicators = custom_price_indicator + custom_days_indicator
@@ -448,11 +493,11 @@ class QuoteGenerator:
                 
                 html += f"""
                     <div class="tariff-item">
-                        <div class="tariff-header">{emoji} {option["name"].lower()}</div>
-                        <div class="tariff-calculation">
+                        <div class="tariff-header">{emoji_html}{option["name"].lower()}</div>
+                        <div class="tariff-calculation nums">
                             {price_per_unit_str} руб x {qty_formatted} шт = {total_price} руб
                         </div>
-                        <div class="tariff-timeline">
+                        <div class="tariff-timeline nums">
                             Сроки работ: {option["lead_time"]}<br>
                             Готовность: {option["delivery_date"]}
                         </div>
@@ -488,7 +533,7 @@ class QuoteGenerator:
         html += """
         <div class="section">
             <h2>Важная информация</h2>
-            <ul class="list">
+            <ul class="list nums">
         """
         
         for item in important:
@@ -503,8 +548,8 @@ class QuoteGenerator:
             <p>Свяжитесь с нами для подтверждения заказа</p>
             <div class="contact-info">
                 <p><strong>Наш Telegram:</strong> <a href="https://t.me/rusfart1" class="contact-link" target="_blank">@rusfart1</a></p>
-                <p><strong>Телефон:</strong> <a href="tel:+79931401814" class="contact-link">{cta["contact_info"]["phone"]}</a></p>
-                <p><strong>WhatsApp:</strong> <a href="https://wa.me/79931401814" class="contact-link" target="_blank">{cta["contact_info"]["whatsapp"]}</a></p>
+                <p><strong>Телефон:</strong> <a href="tel:+79931401814" class="contact-link"><span class="nums">{cta["contact_info"]["phone"]}</span></a></p>
+                <p><strong>WhatsApp:</strong> <a href="https://wa.me/79931401814" class="contact-link" target="_blank"><span class="nums">{cta["contact_info"]["whatsapp"]}</span></a></p>
             </div>
         </div>
         
