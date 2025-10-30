@@ -72,13 +72,17 @@ class QuoteForm(BaseModel):
     # Quantity and pricing
     qty: int = Field(..., ge=1, le=100000, description="Quantity")
     sla_type: Optional[SLAType] = None  # Опциональное поле как дополнительный фильтр/категорию
-    delivery_days: int = Field(..., ge=1, description="Number of working days")
     unit_price: float = Field(..., ge=0.01, le=1000000, description="Price per unit")
+    die_cut_form: Optional[float] = Field(None, ge=0, description="Die cut form cost")
     batch_cost: Optional[int] = Field(None, ge=0, le=10000000)
     
     # Additional fields from frontend
     selected_tariff: Optional[str] = Field(None, max_length=50)
     final_price: Optional[float] = Field(None, ge=0)
+    
+    # Поля для выбранных тарифов и пар объем-цена
+    selected_tariffs: Optional[List[str]] = Field(None, description="Selected tariff types")
+    volume_price_pairs: Optional[List[Dict[str, str]]] = Field(None, description="Volume to price pairs")
     
     # Поля для ручного редактирования цен тарифов
     custom_standard_price: Optional[float] = Field(None, ge=0)
@@ -90,11 +94,7 @@ class QuoteForm(BaseModel):
     custom_strategic_days: Optional[int] = Field(None, ge=1)
     
     # Company information
-    company: Optional[str] = Field(None, max_length=200)
     contact_name: Optional[str] = Field(None, max_length=100)
-    city: Optional[str] = Field(None, max_length=100)
-    phone: Optional[str] = Field(None, max_length=20)
-    email: Optional[str] = Field(None, pattern=r'^[^@]+@[^@]+\.[^@]+$')
     tg_username: Optional[str] = Field(None, max_length=50)
     
     # Optional consent flag for GDPR/152-FZ

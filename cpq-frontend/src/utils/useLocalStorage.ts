@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 
 /**
  * Хук для работы с localStorage с типизацией и обработкой ошибок

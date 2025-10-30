@@ -26,8 +26,8 @@ export const quoteSchema = z.object({
   print: z.string().optional(),
   qty: z.number().int().min(1, 'Минимум 1').max(100000, 'Максимум 100000'),
   sla_type: z.string().optional(), // Опциональное поле как дополнительный фильтр/категорию
-  delivery_days: z.number().int().min(1, 'Минимум 1 день'), // Количество рабочих дней
   unit_price: z.number().min(0.01, 'Минимум 0.01').max(1000000, 'Максимум 1,000,000'),
+  die_cut_form: z.number().min(0).optional(),
   batch_cost: z.number().int().min(0, 'Минимум 0').max(10000000, 'Максимум 10,000,000').optional(),
   selected_tariff: z.string().optional(),
   final_price: z.number().min(0).optional(),
@@ -39,15 +39,13 @@ export const quoteSchema = z.object({
   custom_standard_days: z.number().min(1, 'Минимум 1 день').optional(),
   custom_urgent_days: z.number().min(1, 'Минимум 1 день').optional(),
   custom_strategic_days: z.number().min(1, 'Минимум 1 день').optional(),
-  company: z.string().max(200).optional(),
+  // Поля для выбранных тарифов и пар объем-цена
+  selected_tariffs: z.array(z.string()).optional(),
+  volume_price_pairs: z.array(z.object({
+    volume: z.string(),
+    price: z.string()
+  })).optional(),
   contact_name: z.string().max(100).optional(),
-  city: z.string().max(100).optional(),
-  phone: z.string().max(20).optional(),
-  email: z
-    .string()
-    .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Неверный email')
-    .optional()
-    .or(z.literal('')),
   tg_username: z.string().max(50).optional(),
   consent_given: z.boolean().optional(),
 }).refine((data) => {

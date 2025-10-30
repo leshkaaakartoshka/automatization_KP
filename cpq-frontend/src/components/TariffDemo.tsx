@@ -5,8 +5,8 @@ export function TariffDemo() {
   const [basePrice, setBasePrice] = useState<number>(50000);
   const [selectedTariff, setSelectedTariff] = useState<TariffType>('standard');
 
-  const tariffs = calculateTariffs(basePrice);
-  const tariffInfos = getAllTariffInfos(basePrice);
+  const tariffs = calculateTariffs(basePrice, 1000, 10);
+  const tariffInfos = getAllTariffInfos(basePrice, 1000, 10);
 
   return (
     <div style={{

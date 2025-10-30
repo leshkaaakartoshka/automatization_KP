@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { useForm } from 'react-hook-form';
-import { IMaskInput } from 'react-imask';
 import { FormField, FormRow, ResultCard, StatusBar } from './components/FormPrimitives';
 import { fefcoFoldingOptions, fefcoWrappingOptions, fefcoAuxiliaryOptions, cardboardTypeOptions, cardboardGradeOptions, printOptions, type QuoteFormData } from './validation';
 import { postQuote, type ApiResponse } from './api';
@@ -41,6 +40,8 @@ function App() {
   const [result, setResult] = useState<ApiResponse | null>(null);
   const [customPrices, setCustomPrices] = useState<Record<TariffType, number | null>>({} as Record<TariffType, number | null>);
   const [customDays, setCustomDays] = useState<Record<TariffType, number | null>>({} as Record<TariffType, number | null>);
+  const [selectedTariffs, setSelectedTariffs] = useState<Set<TariffType>>(new Set(['standard']));
+  const [volumePricePairs, setVolumePricePairs] = useState<Array<{volume: string, price: string}>>([]);
   const abortRef = useRef<AbortController | null>(null);
   const hasRestoredRef = useRef(false);
 
@@ -60,6 +61,8 @@ function App() {
   const [tariffState, setTariffState, clearTariffState] = useLocalStorage('cpq-tariff-state', {
     customPrices: {} as Record<TariffType, number | null>,
     customDays: {} as Record<TariffType, number | null>,
+    selectedTariffs: ['standard'] as TariffType[],
+    volumePricePairs: [] as Array<{volume: string, price: string}>,
   });
 
   // Восстановление сохраненных данных при монтировании компонента
@@ -83,6 +86,12 @@ function App() {
     if (Object.keys(tariffState.customDays).length > 0) {
       setCustomDays(tariffState.customDays);
     }
+    if (tariffState.selectedTariffs && tariffState.selectedTariffs.length > 0) {
+      setSelectedTariffs(new Set(tariffState.selectedTariffs));
+    }
+    if (tariffState.volumePricePairs && tariffState.volumePricePairs.length > 0) {
+      setVolumePricePairs(tariffState.volumePricePairs);
+    }
   }, []); // Empty deps - run only on mount
 
   // Автосохранение данных формы при изменении
@@ -104,8 +113,10 @@ function App() {
     setTariffState({
       customPrices,
       customDays,
+      selectedTariffs: Array.from(selectedTariffs),
+      volumePricePairs,
     });
-  }, [customPrices, customDays, setTariffState]);
+  }, [customPrices, customDays, selectedTariffs, volumePricePairs, setTariffState]);
 
   // Функция для полной очистки формы и сохраненных данных
   const clearForm = () => {
@@ -118,17 +129,15 @@ function App() {
     setValue('z_mm', 0);
     setValue('print', '');
     setValue('qty', 0);
-    setValue('delivery_days', 0);
     setValue('unit_price', 0);
-    setValue('company', '');
+    setValue('die_cut_form', 0);
     setValue('contact_name', '');
-    setValue('city', '');
-    setValue('phone', '');
-    setValue('email', '');
     
     // Сбрасываем состояние тарифов
     setCustomPrices({} as Record<TariffType, number | null>);
     setCustomDays({} as Record<TariffType, number | null>);
+    setSelectedTariffs(new Set(['standard']));
+    setVolumePricePairs([]);
     
     // Очищаем localStorage
     clearFormData();
@@ -155,6 +164,10 @@ function App() {
       batch_cost: batchCost, // Добавляем рассчитанную стоимость партии
       selected_tariff: 'standard', // Всегда отправляем стандартный тариф
       final_price: finalTariffs['standard'],
+      // Добавляем выбранные тарифы
+      selected_tariffs: Array.from(selectedTariffs),
+      // Добавляем пары объем-цена
+      volume_price_pairs: volumePricePairs.length > 0 ? volumePricePairs : undefined,
       // Добавляем пользовательские цены
       custom_standard_price: customPrices.standard ?? undefined,
       custom_urgent_price: customPrices.urgent ?? undefined,
@@ -167,11 +180,7 @@ function App() {
       // Убираем пустые строки для необязательных полей
       cardboard_grade: values.cardboard_grade || undefined,
       print: values.print || undefined,
-      company: values.company || undefined,
       contact_name: values.contact_name || undefined,
-      city: values.city || undefined,
-      phone: values.phone || undefined,
-      email: values.email || undefined,
       tg_username: values.tg_username || undefined,
     };
     
@@ -197,17 +206,16 @@ function App() {
   // Получаем выбранный тип картона для условного отображения марки
   const watchedCardboardType = watch('cardboard_type');
   
-  // Получаем цену за единицу, количество и сроки для расчета тарифов
+  // Получаем цену за единицу и количество для расчета тарифов
   const watchedUnitPrice = watch('unit_price') || 0;
   const watchedQty = watch('qty') || 0;
-  const watchedDeliveryDays = watch('delivery_days') || 0;
   
   // Рассчитываем стоимость партии автоматически
   const batchCost = useMemo(() => watchedUnitPrice * watchedQty, [watchedUnitPrice, watchedQty]);
   
   // Рассчитываем все варианты тарифов с мемоизацией
-  const tariffs = useMemo(() => calculateTariffs(watchedUnitPrice, watchedQty, watchedDeliveryDays), [watchedUnitPrice, watchedQty, watchedDeliveryDays]);
-  const tariffInfos = useMemo(() => getAllTariffInfos(watchedUnitPrice, watchedQty, watchedDeliveryDays), [watchedUnitPrice, watchedQty, watchedDeliveryDays]);
+  const tariffs = useMemo(() => calculateTariffs(watchedUnitPrice, watchedQty, 10), [watchedUnitPrice, watchedQty]);
+  const tariffInfos = useMemo(() => getAllTariffInfos(watchedUnitPrice, watchedQty, 10), [watchedUnitPrice, watchedQty]);
 
   return (
     <main className="mx-auto max-w-3xl p-4">
@@ -313,18 +321,68 @@ function App() {
           </FormRow>
 
           <FormRow>
-            <FormField id="delivery_days" label="Кол-во рабочих дней" required error={errors.delivery_days?.message}>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                step={1}
-                placeholder="10"
-                className="w-full rounded-md border px-3 py-2"
-                {...register('delivery_days', { valueAsNumber: true })}
-              />
+            <FormField id="volume_price" label="Объём к цене">
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVolumePricePairs(prev => [...prev, { volume: '', price: '' }]);
+                  }}
+                  className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  + Добавить объём к цене
+                </button>
+                
+                {volumePricePairs.map((pair, index) => (
+                  <div key={index} className="flex items-center gap-3 p-3 border border-gray-300 rounded-md bg-gray-50">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Объем
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="300"
+                        value={pair.volume}
+                        onChange={(e) => {
+                          const newPairs = [...volumePricePairs];
+                          newPairs[index] = { ...pair, volume: e.target.value };
+                          setVolumePricePairs(newPairs);
+                        }}
+                        className="w-full rounded border px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Цена за штуку
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="30 руб"
+                        value={pair.price}
+                        onChange={(e) => {
+                          const newPairs = [...volumePricePairs];
+                          newPairs[index] = { ...pair, price: e.target.value };
+                          setVolumePricePairs(newPairs);
+                        }}
+                        className="w-full rounded border px-2 py-1 text-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVolumePricePairs(prev => prev.filter((_, i) => i !== index));
+                      }}
+                      className="text-red-600 hover:text-red-800 p-1"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
             </FormField>
+          </FormRow>
 
+          <FormRow>
             <FormField id="unit_price" label="Цена за единицу коробки" required error={errors.unit_price?.message}>
               <input
                 type="number"
@@ -337,11 +395,23 @@ function App() {
                 {...register('unit_price', { valueAsNumber: true })}
               />
             </FormField>
+
+            <FormField id="die_cut_form" label="Штанцформа" error={errors.die_cut_form?.message}>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={0.01}
+                placeholder="0.00"
+                className="w-full rounded-md border px-3 py-2"
+                {...register('die_cut_form', { valueAsNumber: true })}
+              />
+            </FormField>
           </FormRow>
 
 
           {/* Переключатель тарифов */}
-          {watchedUnitPrice > 0 && watchedDeliveryDays > 0 && (
+          {watchedUnitPrice > 0 && (
             <FormRow>
               <FormField id="tariff_selection" label="Доступные тарифы">
                 <div className="space-y-3">
@@ -351,55 +421,74 @@ function App() {
                       className="p-3 rounded-md border border-gray-300 bg-gray-50"
                     >
                       <div className="flex items-center">
-                        <div className="flex-1">
-                          <div className="font-medium text-gray-900">
-                            {tariff.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {tariff.description} • {tariff.deliveryDays} рабочих дней
+                        <div className="flex items-center gap-3 flex-1">
+                          <input
+                            type="checkbox"
+                            id={`tariff-${tariff.type}`}
+                            checked={selectedTariffs.has(tariff.type)}
+                            onChange={(e) => {
+                              const newSelectedTariffs = new Set(selectedTariffs);
+                              if (e.target.checked) {
+                                newSelectedTariffs.add(tariff.type);
+                              } else {
+                                newSelectedTariffs.delete(tariff.type);
+                              }
+                              setSelectedTariffs(newSelectedTariffs);
+                            }}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-900">
+                              {tariff.name}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {tariff.description}
+                            </div>
                           </div>
                         </div>
                       </div>
                       
-                      <div className="mt-2 flex items-center gap-4">
-                        <div className="flex items-center gap-2 flex-1">
-                          <span className="text-sm text-gray-600">Цена:</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder={tariff.price.toString()}
-                            value={customPrices[tariff.type] ?? ''}
-                            onChange={(e) => {
-                              const value = e.target.value === '' ? null : Number(e.target.value);
-                              setCustomPrices(prev => ({
-                                ...prev,
-                                [tariff.type]: value
-                              }));
-                            }}
-                            className="flex-1 rounded border px-2 py-1 text-sm"
-                          />
-                          <span className="text-sm text-gray-600">руб</span>
+                      {selectedTariffs.has(tariff.type) && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex items-center gap-1 flex-1">
+                            <span className="text-sm text-gray-600 whitespace-nowrap">Цена:</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              placeholder={tariff.price.toString()}
+                              value={customPrices[tariff.type] ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value === '' ? null : Number(e.target.value);
+                                setCustomPrices(prev => ({
+                                  ...prev,
+                                  [tariff.type]: value
+                                }));
+                              }}
+                              className="flex-1 rounded border px-2 py-1 text-sm"
+                            />
+                            <span className="text-sm text-gray-600 whitespace-nowrap">руб</span>
+                          </div>
+                          
+                          <div className="flex items-center gap-1 flex-1">
+                            <span className="text-sm text-gray-600 whitespace-nowrap">Срок:</span>
+                            <input
+                              type="number"
+                              placeholder={tariff.deliveryDays.toString()}
+                              value={customDays[tariff.type] ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value === '' ? null : Number(e.target.value);
+                                setCustomDays(prev => ({
+                                  ...prev,
+                                  [tariff.type]: value
+                                }));
+                              }}
+                              className="flex-1 rounded border px-2 py-1 text-sm"
+                            />
+                            <span className="text-sm text-gray-600 whitespace-nowrap">дней</span>
+                          </div>
                         </div>
-                        
-                        <div className="flex items-center gap-2 flex-1">
-                          <span className="text-sm text-gray-600">Срок:</span>
-                          <input
-                            type="number"
-                            placeholder={tariff.deliveryDays.toString()}
-                            value={customDays[tariff.type] ?? ''}
-                            onChange={(e) => {
-                              const value = e.target.value === '' ? null : Number(e.target.value);
-                              setCustomDays(prev => ({
-                                ...prev,
-                                [tariff.type]: value
-                              }));
-                            }}
-                            className="flex-1 rounded border px-2 py-1 text-sm"
-                          />
-                          <span className="text-sm text-gray-600">дней</span>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -409,31 +498,10 @@ function App() {
         </fieldset>
 
         <fieldset className="mt-6 rounded-md border p-4">
-          <legend className="px-1 text-base font-medium">Контакты и доставка</legend>
+          <legend className="px-1 text-base font-medium">Контактная информация</legend>
           <FormRow>
-            <FormField id="company" label="Компания" error={errors.company?.message}>
-              <input className="w-full rounded-md border px-3 py-2" maxLength={120} {...register('company')} />
-            </FormField>
             <FormField id="contact_name" label="Контактное лицо" error={errors.contact_name?.message}>
               <input className="w-full rounded-md border px-3 py-2" maxLength={80} {...register('contact_name')} />
-            </FormField>
-          </FormRow>
-          <FormRow>
-            <FormField id="city" label="Город" error={errors.city?.message}>
-              <input className="w-full rounded-md border px-3 py-2" maxLength={80} {...register('city')} />
-            </FormField>
-            <FormField id="phone" label="Телефон" hint="+7 999 999-99-99" error={errors.phone?.message}>
-              <IMaskInput
-                mask={'+{7} 000 000-00-00'}
-                className="w-full rounded-md border px-3 py-2"
-                onAccept={(value: string) => setValue('phone', value, { shouldDirty: true, shouldValidate: true })}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValue('phone', e.target.value, { shouldDirty: true, shouldValidate: true })}
-              />
-            </FormField>
-          </FormRow>
-          <FormRow>
-            <FormField id="email" label="Email" error={errors.email?.message}>
-              <input type="email" className="w-full rounded-md border px-3 py-2" {...register('email')} />
             </FormField>
           </FormRow>
         </fieldset>
