@@ -186,11 +186,13 @@ class QuoteGenerator:
         else:
             greeting_text = "Доброго времени суток! Благодарим вас за выбор нашей компании, чтобы наше сотрудничество было наиболее для вас удобным продублировали для вас ваш заказ:"
         
-        # Prepare SVG emoji data URIs
+        # Prepare SVG emoji data URIs using paths relative to this file
+        base_dir = Path(__file__).resolve().parents[1]  # backend/app
+        emoji_dir = base_dir / "static" / "emoji"
         emoji_paths = {
-            "Стандарт": "/home/russian-bogatyr/Рабочий стол/automatization_KP/backend/app/static/emoji/checkpoint.svg",
-            "Срочно": "/home/russian-bogatyr/Рабочий стол/automatization_KP/backend/app/static/emoji/fire.svg",
-            "Стратегический": "/home/russian-богатyr/Рабочий стол/automatization_KP/backend/app/static/emoji/biceps.svg"
+            "Стандарт": str(emoji_dir / "checkpoint.svg"),
+            "Срочно": str(emoji_dir / "fire.svg"),
+            "Стратегический": str(emoji_dir / "biceps.svg"),
         }
         emoji_data_uris: Dict[str, str] = {}
         for name, p in emoji_paths.items():
@@ -199,8 +201,8 @@ class QuoteGenerator:
                 b64 = base64.b64encode(svg_bytes).decode("utf-8")
                 emoji_data_uris[name] = f"data:image/svg+xml;base64,{b64}"
             except Exception:
-                # If file is missing, skip icon for this tariff
-                pass
+                # If file is missing, log and skip icon for this tariff
+                print(f"SVG icon missing or unreadable for {name}: {p}")
 
         html = f"""
 <!DOCTYPE html>
